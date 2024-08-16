@@ -1510,3 +1510,13 @@ AUDIO_TTS_SPLIT_ON = PersistentConfig(
     "audio.tts.split_on",
     os.getenv("AUDIO_TTS_SPLIT_ON", "punctuation"),
 )
+
+####################################
+# LDAP
+####################################
+LDAP_SERVER = os.environ.get("LDAP_SERVER", "") # TODO: make it configurable through the UI?
+LDAP_USERS_DN = os.environ.get("LDAP_USERS_DN", "")
+LDAP_APP_DN = os.environ.get("LDAP_APP_DN", "")
+LDAP_APP_PASSWORD = os.environ.get("LDAP_APP_PASSWORD", "")
+USE_SSL = os.environ.get("USE_SSL", "false").lower() == "true"
+CA_CERT_FILE = os.environ.get("CA_CERT_FILE", "")
