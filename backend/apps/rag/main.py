@@ -1,96 +1,46 @@
-from fastapi import (
-    FastAPI,
-    Depends,
-    HTTPException,
-    status,
-    UploadFile,
-    File,
-    Form,
-)
-from fastapi.middleware.cors import CORSMiddleware
-import requests
-import os, shutil, logging, re
-from datetime import datetime
-
-from pathlib import Path
-from typing import Union, Sequence, Iterator, Any
-
-from chromadb.utils.batch_utils import create_batches
-from langchain_core.documents import Document
-
-from langchain_community.document_loaders import (
-    WebBaseLoader,
-    TextLoader,
-    PyPDFLoader,
-    CSVLoader,
-    BSHTMLLoader,
-    Docx2txtLoader,
-    UnstructuredEPubLoader,
-    UnstructuredWordDocumentLoader,
-    UnstructuredMarkdownLoader,
-    UnstructuredXMLLoader,
-    UnstructuredRSTLoader,
-    UnstructuredExcelLoader,
-    UnstructuredPowerPointLoader,
-    YoutubeLoader,
-    OutlookMessageLoader,
-)
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-import validators
-import urllib.parse
-import socket
-
-
-from pydantic import BaseModel
-from typing import Optional
-import mimetypes
-import uuid
 import json
+import logging
+import mimetypes
+import os
+import shutil
+import socket
+import urllib.parse
+from pathlib import Path
+from typing import Iterator, Optional, Sequence, Union
 
+import requests
+import validators
+from apps.rag.embedding_model import set_embedding_function
+from apps.rag.search.brave import search_brave
+from apps.rag.search.duckduckgo import search_duckduckgo
+from apps.rag.search.google_pse import search_google_pse
+from apps.rag.search.jina_search import search_jina
+from apps.rag.search.main import SearchResult
+from apps.rag.search.searxng import search_searxng
+from apps.rag.search.serper import search_serper
+from apps.rag.search.serply import search_serply
+from apps.rag.search.serpstack import search_serpstack
+from apps.rag.search.tavily import search_tavily
+from apps.rag.utils import (
+    get_model_path,
+    query_collection,
+    query_collection_with_hybrid_search,
+    query_doc,
+    query_doc_with_hybrid_search,
+)
+from apps.rag.vector_store import VECTOR_STORE_CONNECTOR
+from apps.rag.vector_store.implementations.chroma import Chroma, PersistentChroma
 from apps.webui.models.documents import (
-    Documents,
     DocumentForm,
-    DocumentResponse,
+    Documents,
 )
 from apps.webui.models.files import (
     Files,
 )
-
-from apps.rag.utils import (
-    get_model_path,
-    get_embedding_function,
-    query_doc,
-    query_doc_with_hybrid_search,
-    query_collection,
-    query_collection_with_hybrid_search,
-)
-
-from apps.rag.search.brave import search_brave
-from apps.rag.search.google_pse import search_google_pse
-from apps.rag.search.main import SearchResult
-from apps.rag.search.searxng import search_searxng
-from apps.rag.search.serper import search_serper
-from apps.rag.search.serpstack import search_serpstack
-from apps.rag.search.serply import search_serply
-from apps.rag.search.duckduckgo import search_duckduckgo
-from apps.rag.search.tavily import search_tavily
-from apps.rag.search.jina_search import search_jina
-
-from utils.misc import (
-    calculate_sha256,
-    calculate_sha256_string,
-    sanitize_filename,
-    extract_folders_after_data_docs,
-)
-from utils.utils import get_verified_user, get_admin_user
-
 from config import (
-    AppConfig,
-    ENV,
-    SRC_LOG_LEVELS,
-    UPLOAD_DIR,
-    DOCS_DIR,
+    BRAVE_SEARCH_API_KEY,
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
     CONTENT_EXTRACTION_ENGINE,
     TIKA_SERVER_URL,
     RAG_TOP_K,
@@ -101,48 +51,95 @@ from config import (
     RAG_EMBEDDING_MODEL,
     RAG_EMBEDDING_MODEL_AUTO_UPDATE,
     RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
-    ENABLE_RAG_HYBRID_SEARCH,
-    ENABLE_RAG_WEB_LOADER_SSL_VERIFICATION,
-    RAG_RERANKING_MODEL,
-    PDF_EXTRACT_IMAGES,
-    RAG_RERANKING_MODEL_AUTO_UPDATE,
-    RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
-    RAG_OPENAI_API_BASE_URL,
-    RAG_OPENAI_API_KEY,
     DEVICE_TYPE,
-    CHROMA_CLIENT,
-    CHUNK_SIZE,
-    CHUNK_OVERLAP,
-    RAG_TEMPLATE,
+    DOCS_DIR,
+    ENABLE_RAG_HYBRID_SEARCH,
     ENABLE_RAG_LOCAL_WEB_FETCH,
-    YOUTUBE_LOADER_LANGUAGE,
+    ENABLE_RAG_WEB_LOADER_SSL_VERIFICATION,
     ENABLE_RAG_WEB_SEARCH,
-    RAG_WEB_SEARCH_ENGINE,
-    RAG_WEB_SEARCH_DOMAIN_FILTER_LIST,
-    SEARXNG_QUERY_URL,
+    ENV,
     GOOGLE_PSE_API_KEY,
     GOOGLE_PSE_ENGINE_ID,
-    BRAVE_SEARCH_API_KEY,
-    SERPSTACK_API_KEY,
-    SERPSTACK_HTTPS,
+    PDF_EXTRACT_IMAGES,
+    RAG_EMBEDDING_ENGINE,
+    RAG_EMBEDDING_MODEL,
+    RAG_EMBEDDING_OPENAI_BATCH_SIZE,
+    RAG_OPENAI_API_BASE_URL,
+    RAG_OPENAI_API_KEY,
+    RAG_RELEVANCE_THRESHOLD,
+    RAG_RERANKING_MODEL,
+    RAG_RERANKING_MODEL_AUTO_UPDATE,
+    RAG_RERANKING_MODEL_TRUST_REMOTE_CODE,
+    RAG_TEMPLATE,
+    RAG_TOP_K,
+    RAG_WEB_SEARCH_CONCURRENT_REQUESTS,
+    RAG_WEB_SEARCH_DOMAIN_FILTER_LIST,
+    RAG_WEB_SEARCH_ENGINE,
+    RAG_WEB_SEARCH_RESULT_COUNT,
+    SEARXNG_QUERY_URL,
     SERPER_API_KEY,
     SERPLY_API_KEY,
+    SERPSTACK_API_KEY,
+    SERPSTACK_HTTPS,
+    SRC_LOG_LEVELS,
     TAVILY_API_KEY,
-    RAG_WEB_SEARCH_RESULT_COUNT,
-    RAG_WEB_SEARCH_CONCURRENT_REQUESTS,
-    RAG_EMBEDDING_OPENAI_BATCH_SIZE,
-    CORS_ALLOW_ORIGIN,
+    TIKA_SERVER_URL,
+    UPLOAD_DIR,
+    VECTOR_STORE_TYPE,
+    YOUTUBE_LOADER_LANGUAGE,
+    AppConfig,
 )
-
 from constants import ERROR_MESSAGES
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
+from fastapi.middleware.cors import CORSMiddleware
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import (
+    BSHTMLLoader,
+    CSVLoader,
+    Docx2txtLoader,
+    OutlookMessageLoader,
+    PyPDFLoader,
+    TextLoader,
+    UnstructuredEPubLoader,
+    UnstructuredExcelLoader,
+    UnstructuredMarkdownLoader,
+    UnstructuredPowerPointLoader,
+    UnstructuredRSTLoader,
+    UnstructuredXMLLoader,
+    WebBaseLoader,
+    YoutubeLoader,
+)
+from langchain_core.documents import Document
+from pydantic import BaseModel
+from utils.misc import (
+    calculate_sha256,
+    calculate_sha256_string,
+    extract_folders_after_data_docs,
+    sanitize_filename,
+)
+from utils.utils import get_admin_user, get_verified_user
 
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.state.config = AppConfig()
-
 app.state.config.TOP_K = RAG_TOP_K
 app.state.config.RELEVANCE_THRESHOLD = RAG_RELEVANCE_THRESHOLD
 app.state.config.FILE_MAX_SIZE = RAG_FILE_MAX_SIZE
@@ -193,20 +190,13 @@ app.state.config.RAG_WEB_SEARCH_RESULT_COUNT = RAG_WEB_SEARCH_RESULT_COUNT
 app.state.config.RAG_WEB_SEARCH_CONCURRENT_REQUESTS = RAG_WEB_SEARCH_CONCURRENT_REQUESTS
 
 
-def update_embedding_model(
-    embedding_model: str,
-    update_model: bool = False,
-):
-    if embedding_model and app.state.config.RAG_EMBEDDING_ENGINE == "":
-        import sentence_transformers
-
-        app.state.sentence_transformer_ef = sentence_transformers.SentenceTransformer(
-            get_model_path(embedding_model, update_model),
-            device=DEVICE_TYPE,
-            trust_remote_code=RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
-        )
-    else:
-        app.state.sentence_transformer_ef = None
+app.state.EMBEDDING_FUNCTION = set_embedding_function(
+    embedding_engine=app.state.config.RAG_EMBEDDING_ENGINE,
+    model_name=app.state.config.RAG_EMBEDDING_MODEL,
+    base_url=app.state.config.OPENAI_API_BASE_URL,
+    api_key=app.state.config.OPENAI_API_KEY,
+    batch_size=app.state.config.RAG_EMBEDDING_OPENAI_BATCH_SIZE,
+)
 
 
 def update_reranking_model(
@@ -225,32 +215,9 @@ def update_reranking_model(
         app.state.sentence_transformer_rf = None
 
 
-update_embedding_model(
-    app.state.config.RAG_EMBEDDING_MODEL,
-    RAG_EMBEDDING_MODEL_AUTO_UPDATE,
-)
-
 update_reranking_model(
     app.state.config.RAG_RERANKING_MODEL,
     RAG_RERANKING_MODEL_AUTO_UPDATE,
-)
-
-
-app.state.EMBEDDING_FUNCTION = get_embedding_function(
-    app.state.config.RAG_EMBEDDING_ENGINE,
-    app.state.config.RAG_EMBEDDING_MODEL,
-    app.state.sentence_transformer_ef,
-    app.state.config.OPENAI_API_KEY,
-    app.state.config.OPENAI_API_BASE_URL,
-    app.state.config.RAG_EMBEDDING_OPENAI_BATCH_SIZE,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGIN,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 
@@ -335,15 +302,12 @@ async def update_embedding_config(
                     else 1
                 )
 
-        update_embedding_model(app.state.config.RAG_EMBEDDING_MODEL)
-
-        app.state.EMBEDDING_FUNCTION = get_embedding_function(
-            app.state.config.RAG_EMBEDDING_ENGINE,
-            app.state.config.RAG_EMBEDDING_MODEL,
-            app.state.sentence_transformer_ef,
-            app.state.config.OPENAI_API_KEY,
-            app.state.config.OPENAI_API_BASE_URL,
-            app.state.config.RAG_EMBEDDING_OPENAI_BATCH_SIZE,
+        app.state.EMBEDDING_FUNCTION = set_embedding_function(
+            embedding_engine=app.state.config.RAG_EMBEDDING_ENGINE,
+            model_name=app.state.config.RAG_EMBEDDING_MODEL,
+            base_url=app.state.config.OPENAI_API_BASE_URL,
+            api_key=app.state.config.OPENAI_API_KEY,
+            batch_size=app.state.config.RAG_EMBEDDING_OPENAI_BATCH_SIZE,
         )
 
         return {
@@ -952,27 +916,89 @@ def store_web_search(form_data: SearchForm, user=Depends(get_verified_user)):
 
 
 def store_data_in_vector_db(
-    data, collection_name, metadata: Optional[dict] = None, overwrite: bool = False
+    data: list[Document],
+    collection_name: str,
+    metadata: dict = {},
+    overwrite: bool = False,
+    append: bool = False,
+    silent_error: bool = True,
 ) -> bool:
+    """
+    Transform texts to embedded chunk of documents and store in the VectorStore.
 
+    Args:
+        data (list[Document]): List of LangChain Documents.
+        collection_name (str): The collection name to store chunk of embedded documents.
+        metadata (dict): The metadata dict to add with the documents.
+        overwrite (bool): Whether to overwrite current collection. If the collection
+            exists already and overwrite is set to False then raises an error if append
+            option is not set to True.
+        append (bool): Whether to append data to the collection.
+        silent_error (bool): If an expected error appears will still return True.
+    """
+    # In case the overwrite option is set to False and append option is set to False
+    # check if the collection is empty before storing data.
+    if not overwrite and not append:
+        vector_store = VECTOR_STORE_CONNECTOR.get_vs_collection(
+            collection_name=collection_name,
+            embedding_function=app.state.EMBEDDING_FUNCTION,
+        )
+        if not vector_store.is_collection_empty():
+            if silent_error:
+                return True
+            else:
+                raise Exception(
+                    "The VectorStore collection is not empty. Consider setting overwrite or append option to True."
+                )
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=app.state.config.CHUNK_SIZE,
         chunk_overlap=app.state.config.CHUNK_OVERLAP,
         add_start_index=True,
     )
-
     docs = text_splitter.split_documents(data)
 
     if len(docs) > 0:
         log.info(f"store_data_in_vector_db {docs}")
-        return store_docs_in_vector_db(docs, collection_name, metadata, overwrite), None
+        return store_docs_in_vector_db(docs, collection_name, metadata, overwrite)
     else:
         raise ValueError(ERROR_MESSAGES.EMPTY_CONTENT)
 
 
 def store_text_in_vector_db(
-    text, metadata, collection_name, overwrite: bool = False
+    text: str,
+    metadata: dict,
+    collection_name: str,
+    overwrite: bool = False,
+    append: bool = False,
+    silent_error: bool = True,
 ) -> bool:
+    """
+    Transform texts to embedded chunk of texts and store in the VectorStore.
+
+    Args:
+        text (str): The text to embed and store to VectorStore.
+        metadata (dict): The metadata dict to add with the text.
+        collection_name (str): The collection name to store chunk of embedded text.
+        overwrite (bool): Whether to overwrite current collection. If the collection
+            exists already and overwrite is set to False then raises an error if append
+            option is not set to True.
+        append (bool): Whether to append data to the collection.
+        silent_error (bool): If an expected error appears will still return True.
+    """
+    # In case the overwrite option is set to False and append option is set to False
+    # check if the collection is empty before storing data.
+    if not overwrite and not append:
+        vector_store = VECTOR_STORE_CONNECTOR.get_vs_collection(
+            collection_name=collection_name,
+            embedding_function=app.state.EMBEDDING_FUNCTION,
+        )
+        if not vector_store.is_collection_empty():
+            if silent_error:
+                return True
+            else:
+                raise Exception(
+                    "The VectorStore collection is not empty. Consider setting overwrite or append option to True."
+                )
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=app.state.config.CHUNK_SIZE,
         chunk_overlap=app.state.config.CHUNK_OVERLAP,
@@ -983,57 +1009,20 @@ def store_text_in_vector_db(
 
 
 def store_docs_in_vector_db(
-    docs, collection_name, metadata: Optional[dict] = None, overwrite: bool = False
+    docs, collection_name, metadata: dict = {}, overwrite: bool = False
 ) -> bool:
     log.info(f"store_docs_in_vector_db {docs} {collection_name}")
-
-    texts = [doc.page_content for doc in docs]
-    metadatas = [{**doc.metadata, **(metadata if metadata else {})} for doc in docs]
-
-    # ChromaDB does not like datetime formats
-    # for meta-data so convert them to string.
-    for metadata in metadatas:
-        for key, value in metadata.items():
-            if isinstance(value, datetime):
-                metadata[key] = str(value)
-
     try:
-        if overwrite:
-            for collection in CHROMA_CLIENT.list_collections():
-                if collection_name == collection.name:
-                    log.info(f"deleting existing collection {collection_name}")
-                    CHROMA_CLIENT.delete_collection(name=collection_name)
-
-        collection = CHROMA_CLIENT.create_collection(name=collection_name)
-
-        embedding_func = get_embedding_function(
-            app.state.config.RAG_EMBEDDING_ENGINE,
-            app.state.config.RAG_EMBEDDING_MODEL,
-            app.state.sentence_transformer_ef,
-            app.state.config.OPENAI_API_KEY,
-            app.state.config.OPENAI_API_BASE_URL,
-            app.state.config.RAG_EMBEDDING_OPENAI_BATCH_SIZE,
+        VECTOR_STORE_CONNECTOR.vs_class.from_documents(
+            documents=docs,
+            collection_name=collection_name,
+            embedding=app.state.EMBEDDING_FUNCTION,
+            overwrite_collection=overwrite,
+            additional_metadata=metadata,
         )
-
-        embedding_texts = list(map(lambda x: x.replace("\n", " "), texts))
-        embeddings = embedding_func(embedding_texts)
-
-        for batch in create_batches(
-            api=CHROMA_CLIENT,
-            ids=[str(uuid.uuid4()) for _ in texts],
-            metadatas=metadatas,
-            embeddings=embeddings,
-            documents=texts,
-        ):
-            collection.add(*batch)
-
         return True
     except Exception as e:
-        if e.__class__.__name__ == "UniqueConstraintError":
-            return True
-
         log.exception(e)
-
         return False
 
 
@@ -1315,7 +1304,6 @@ def store_text(
     form_data: TextRAGForm,
     user=Depends(get_verified_user),
 ):
-
     collection_name = form_data.collection_name
     if collection_name is None:
         collection_name = calculate_sha256_string(form_data.content)
@@ -1398,7 +1386,14 @@ def scan_docs_dir(user=Depends(get_admin_user)):
 
 @app.post("/reset/db")
 def reset_vector_db(user=Depends(get_admin_user)):
-    CHROMA_CLIENT.reset()
+    if VECTOR_STORE_CONNECTOR.vs_class in [Chroma, PersistentChroma]:
+        VECTOR_STORE_CONNECTOR.vs_class(
+            embedding_function=app.state.EMBEDDING_FUNCTION
+        )._client.reset()
+    else:
+        raise NotImplementedError(
+            f"Resetting Vector Store with {VECTOR_STORE_TYPE} is not yet implemented."
+        )
 
 
 @app.post("/reset/uploads")
@@ -1427,6 +1422,14 @@ def reset_upload_dir(user=Depends(get_admin_user)) -> bool:
 
 @app.post("/reset")
 def reset(user=Depends(get_admin_user)) -> bool:
+    if VECTOR_STORE_CONNECTOR.vs_class not in [Chroma, PersistentChroma]:
+        raise NotImplementedError(
+            f"Resetting Vector Store with {VECTOR_STORE_TYPE} is not yet implemented."
+        )
+    VECTOR_STORE_CONNECTOR.vs_class(
+        embedding_function=app.state.EMBEDDING_FUNCTION
+    )._client.reset()
+
     folder = f"{UPLOAD_DIR}"
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
@@ -1437,11 +1440,6 @@ def reset(user=Depends(get_admin_user)) -> bool:
                 shutil.rmtree(file_path)
         except Exception as e:
             log.error("Failed to delete %s. Reason: %s" % (file_path, e))
-
-    try:
-        CHROMA_CLIENT.reset()
-    except Exception as e:
-        log.exception(e)
 
     return True
 

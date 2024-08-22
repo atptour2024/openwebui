@@ -1,53 +1,49 @@
+import asyncio
+import json
+import logging
+import os
+import random
+import re
+import time
+from typing import Optional, Union
+from urllib.parse import urlparse
+
+import aiohttp
+import requests
+from apps.webui.models.models import Models
+from config import (
+    AIOHTTP_CLIENT_TIMEOUT,
+    CORS_ALLOW_ORIGIN,
+    ENABLE_MODEL_FILTER,
+    ENABLE_OLLAMA_API,
+    MODEL_FILTER_LIST,
+    OLLAMA_BASE_URLS,
+    SRC_LOG_LEVELS,
+    UPLOAD_DIR,
+    AppConfig,
+)
+from constants import ERROR_MESSAGES
 from fastapi import (
-    FastAPI,
-    Request,
-    HTTPException,
     Depends,
-    UploadFile,
+    FastAPI,
     File,
+    HTTPException,
+    Request,
+    UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-
 from pydantic import BaseModel, ConfigDict
-
-import os
-import re
-import random
-import requests
-import json
-import aiohttp
-import asyncio
-import logging
-import time
-from urllib.parse import urlparse
-from typing import Optional, Union
-
 from starlette.background import BackgroundTask
-
-from apps.webui.models.models import Models
-from constants import ERROR_MESSAGES
-from utils.utils import (
-    get_verified_user,
-    get_admin_user,
-)
-
-from config import (
-    SRC_LOG_LEVELS,
-    OLLAMA_BASE_URLS,
-    ENABLE_OLLAMA_API,
-    AIOHTTP_CLIENT_TIMEOUT,
-    ENABLE_MODEL_FILTER,
-    MODEL_FILTER_LIST,
-    UPLOAD_DIR,
-    AppConfig,
-    CORS_ALLOW_ORIGIN,
-)
 from utils.misc import (
-    calculate_sha256,
     apply_model_params_to_body_ollama,
     apply_model_params_to_body_openai,
     apply_model_system_prompt_to_body,
+    calculate_sha256,
+)
+from utils.utils import (
+    get_admin_user,
+    get_verified_user,
 )
 
 log = logging.getLogger(__name__)
@@ -604,58 +600,30 @@ async def generate_embeddings(
         )
 
 
-def generate_ollama_embeddings(
-    form_data: GenerateEmbeddingsForm,
-    url_idx: Optional[int] = None,
-):
-    log.info(f"generate_ollama_embeddings {form_data}")
+def get_ollama_embedding_model_name_and_base_url(
+    input_model_name: str,
+) -> tuple[str, str]:
+    """
+    Get Ollama embedding model name based on an input model name not formatted
+    and fetches also the base URL of the Ollama server.
 
-    if url_idx is None:
-        model = form_data.model
+    Args:
+        input_model_name (str): The input model name not formatted.
 
-        if ":" not in model:
-            model = f"{model}:latest"
-
-        if model in app.state.MODELS:
-            url_idx = random.choice(app.state.MODELS[model]["urls"])
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=ERROR_MESSAGES.MODEL_NOT_FOUND(form_data.model),
-            )
-
-    url = app.state.config.OLLAMA_BASE_URLS[url_idx]
-    log.info(f"url: {url}")
-
-    r = requests.request(
-        method="POST",
-        url=f"{url}/api/embeddings",
-        headers={"Content-Type": "application/json"},
-        data=form_data.model_dump_json(exclude_none=True).encode(),
-    )
-    try:
-        r.raise_for_status()
-
-        data = r.json()
-
-        log.info(f"generate_ollama_embeddings {data}")
-
-        if "embedding" in data:
-            return data["embedding"]
-        else:
-            raise Exception("Something went wrong :/")
-    except Exception as e:
-        log.exception(e)
-        error_detail = "Open WebUI: Server Connection Error"
-        if r is not None:
-            try:
-                res = r.json()
-                if "error" in res:
-                    error_detail = f"Ollama: {res['error']}"
-            except Exception:
-                error_detail = f"Ollama: {e}"
-
-        raise Exception(error_detail)
+    Returns:
+        tuple: Tuple of model_name and base_url.
+    """
+    if ":" not in input_model_name:
+        model_name = f"{input_model_name}:latest"
+    if model_name in app.state.MODELS:
+        url_idx = random.choice(app.state.MODELS[model_name]["urls"])
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=ERROR_MESSAGES.MODEL_NOT_FOUND(model_name),
+        )
+    base_url = app.state.config.OLLAMA_BASE_URLS[url_idx]
+    return model_name, base_url
 
 
 class GenerateCompletionForm(BaseModel):
