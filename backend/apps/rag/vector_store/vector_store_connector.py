@@ -20,10 +20,9 @@ class VectorStoreConnector:
         "persistent_chroma": PersistentChroma,
         "milvus": Milvus,
         "pgvector": PGVector,
-        "default": PersistentChroma,
     }
 
-    def __init__(self, vector_store_type: str = "default"):
+    def __init__(self, vector_store_type: str = "persistent_chroma"):
         if vector_store_type in self._vector_stores:
             self.vector_store_type = vector_store_type
         else:
