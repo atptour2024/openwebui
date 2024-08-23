@@ -91,6 +91,10 @@ class Chroma(LangChainChroma, VectorStoreExtension):
         """Check if the collection is empty or not."""
         return len(self.get_documents(limit=1)) == 0
 
+    def reset(self) -> bool:
+        """Reset VectorStore by deleting all collections."""
+        return self._client.reset()
+
     @classmethod
     def from_documents(
         cls: Type[LangChainChroma],
@@ -212,6 +216,10 @@ class PersistentChroma(LangChainChroma, VectorStoreExtension):
     def is_collection_empty(self) -> bool:
         """Check if the collection is empty or not."""
         return len(self.get_documents(limit=1)) == 0
+
+    def reset(self) -> bool:
+        """Reset VectorStore by deleting all collections."""
+        return self._client.reset()
 
     @classmethod
     def from_documents(

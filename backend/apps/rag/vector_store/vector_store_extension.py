@@ -28,3 +28,7 @@ class VectorStoreExtension(VectorStore):
         given VectorStore to optimize the execution.
         """
         return len(self.similarity_search(query="", k=1)) == 0
+
+    def reset(self) -> bool:
+        """Reset VectorStore by deleting all collections."""
+        raise NotImplementedError

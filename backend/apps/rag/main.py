@@ -29,7 +29,6 @@ from apps.rag.utils import (
     query_doc_with_hybrid_search,
 )
 from apps.rag.vector_store import VECTOR_STORE_CONNECTOR
-from apps.rag.vector_store.implementations.chroma import Chroma, PersistentChroma
 from apps.webui.models.documents import (
     DocumentForm,
     Documents,
@@ -85,7 +84,6 @@ from config import (
     TAVILY_API_KEY,
     TIKA_SERVER_URL,
     UPLOAD_DIR,
-    VECTOR_STORE_TYPE,
     YOUTUBE_LOADER_LANGUAGE,
     AppConfig,
 )
@@ -1386,13 +1384,20 @@ def scan_docs_dir(user=Depends(get_admin_user)):
 
 @app.post("/reset/db")
 def reset_vector_db(user=Depends(get_admin_user)):
-    if VECTOR_STORE_CONNECTOR.vs_class in [Chroma, PersistentChroma]:
+    try:
         VECTOR_STORE_CONNECTOR.vs_class(
             embedding_function=app.state.EMBEDDING_FUNCTION
-        )._client.reset()
-    else:
-        raise NotImplementedError(
-            f"Resetting Vector Store with {VECTOR_STORE_TYPE} is not yet implemented."
+        ).reset()
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Reset not implemented with this VectorStore type.",
+        )
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ERROR_MESSAGES.DEFAULT(),
         )
 
 
@@ -1422,13 +1427,21 @@ def reset_upload_dir(user=Depends(get_admin_user)) -> bool:
 
 @app.post("/reset")
 def reset(user=Depends(get_admin_user)) -> bool:
-    if VECTOR_STORE_CONNECTOR.vs_class not in [Chroma, PersistentChroma]:
-        raise NotImplementedError(
-            f"Resetting Vector Store with {VECTOR_STORE_TYPE} is not yet implemented."
+    try:
+        VECTOR_STORE_CONNECTOR.vs_class(
+            embedding_function=app.state.EMBEDDING_FUNCTION
+        ).reset()
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Reset not implemented with this VectorStore type.",
         )
-    VECTOR_STORE_CONNECTOR.vs_class(
-        embedding_function=app.state.EMBEDDING_FUNCTION
-    )._client.reset()
+    except Exception as e:
+        log.exception(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=ERROR_MESSAGES.DEFAULT(),
+        )
 
     folder = f"{UPLOAD_DIR}"
     for filename in os.listdir(folder):
