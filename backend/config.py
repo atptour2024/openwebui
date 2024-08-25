@@ -1,71 +1,29 @@
-from sqlalchemy import create_engine, Column, Integer, DateTime, JSON, func
-from contextlib import contextmanager
-
-
-import os
-import sys
-import logging
-import importlib.metadata
 import json
 import logging
 import os
-import pkgutil
 import shutil
-import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Generic, Optional, TypeVar
 from urllib.parse import urlparse
-from datetime import datetime
 
 import chromadb
-from chromadb import Settings
-from typing import TypeVar, Generic
-from pydantic import BaseModel
-from typing import Optional
-
-from pathlib import Path
-import json
-import yaml
-
-import requests
-import shutil
-import markdown
 import requests
 import yaml
-from bs4 import BeautifulSoup
-from constants import ERROR_MESSAGES
-from pydantic import BaseModel
-
-
 from apps.webui.internal.db import Base, get_db
-
-from constants import ERROR_MESSAGES
-
 from env import (
-    ENV,
-    VERSION,
-    SAFE_MODE,
-    GLOBAL_LOG_LEVEL,
-    SRC_LOG_LEVELS,
-    BASE_DIR,
-    DATA_DIR,
     BACKEND_DIR,
-    FRONTEND_BUILD_DIR,
-    WEBUI_NAME,
-    WEBUI_URL,
-    WEBUI_FAVICON_URL,
-    WEBUI_BUILD_HASH,
     CONFIG_DATA,
-    DATABASE_URL,
-    CHANGELOG,
+    DATA_DIR,
+    ENV,
+    FRONTEND_BUILD_DIR,
     WEBUI_AUTH,
-    WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
-    WEBUI_AUTH_TRUSTED_NAME_HEADER,
-    WEBUI_SECRET_KEY,
-    WEBUI_SESSION_COOKIE_SAME_SITE,
-    WEBUI_SESSION_COOKIE_SECURE,
+    WEBUI_FAVICON_URL,
+    WEBUI_NAME,
     log,
 )
+from pydantic import BaseModel
+from sqlalchemy import JSON, Column, DateTime, Integer, func
 
 
 class EndpointFilter(logging.Filter):
@@ -85,8 +43,8 @@ logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 def run_migrations():
     print("Running migrations")
     try:
-        from alembic.config import Config
         from alembic import command
+        from alembic.config import Config
 
         alembic_cfg = Config("alembic.ini")
         command.upgrade(alembic_cfg, "head")
@@ -1006,7 +964,9 @@ CHROMA_HTTP_SSL = os.environ.get("CHROMA_HTTP_SSL", "false").lower() == "true"
 CHROMA_TENANT = os.environ.get("CHROMA_TENANT", chromadb.DEFAULT_TENANT)
 CHROMA_DATABASE = os.environ.get("CHROMA_DATABASE", chromadb.DEFAULT_DATABASE)
 ## SPECIFIC CONFIG FOR PGVECTOR
-PGVECTOR_CONNECTION_STR = os.environ.get("PGVECTOR_CONNECTION_STR", "http://localhost:19530")
+PGVECTOR_CONNECTION_STR = os.environ.get(
+    "PGVECTOR_CONNECTION_STR", "http://localhost:19530"
+)
 ## SPECIFIC CONFIG FOR MILVUS
 MILVUS_CONNECTION_URI = os.environ.get("MILVUS_CONNECTION_URI")
 
