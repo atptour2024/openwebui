@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Type
 
 from apps.rag.vector_store.vector_store_extension import VectorStoreExtension
-from config import MILVUS_CONNECTION_URI
+from env import MILVUS_CONNECTION_URI
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_milvus import Milvus as LangChainMilvus

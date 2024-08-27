@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Generic, Optional, TypeVar
 from urllib.parse import urlparse
 
-import chromadb
 import requests
 import yaml
 from apps.webui.internal.db import Base, get_db
@@ -944,31 +943,6 @@ TIKA_SERVER_URL = PersistentConfig(
 ####################################
 # RAG
 ####################################
-
-VECTOR_STORE_TYPE = os.environ.get("VECTOR_STORE_TYPE", "persistent_chroma")
-## SPECIFIC CONFIG FOR PERSISTENT CHROMA
-CHROMA_DATA_PATH = f"{DATA_DIR}/vector_db"
-## SPECIFIC CONFIG FOR CHROMA SERVER
-CHROMA_HTTP_HOST = os.environ.get("CHROMA_HTTP_HOST", "localhost")
-CHROMA_HTTP_PORT = int(os.environ.get("CHROMA_HTTP_PORT", "8000"))
-# Comma-separated list of header=value pairs
-CHROMA_HTTP_HEADERS = os.environ.get("CHROMA_HTTP_HEADERS", "")
-if CHROMA_HTTP_HEADERS:
-    CHROMA_HTTP_HEADERS = dict(
-        [pair.split("=") for pair in CHROMA_HTTP_HEADERS.split(",")]
-    )
-else:
-    CHROMA_HTTP_HEADERS = None
-CHROMA_HTTP_SSL = os.environ.get("CHROMA_HTTP_SSL", "false").lower() == "true"
-## SHARED CONFIG FOR PERSISTENT CHROMA & CHROMA SERVER
-CHROMA_TENANT = os.environ.get("CHROMA_TENANT", chromadb.DEFAULT_TENANT)
-CHROMA_DATABASE = os.environ.get("CHROMA_DATABASE", chromadb.DEFAULT_DATABASE)
-## SPECIFIC CONFIG FOR PGVECTOR
-PGVECTOR_CONNECTION_STR = os.environ.get(
-    "PGVECTOR_CONNECTION_STR", "http://localhost:19530"
-)
-## SPECIFIC CONFIG FOR MILVUS
-MILVUS_CONNECTION_URI = os.environ.get("MILVUS_CONNECTION_URI")
 
 # this uses the model defined in the Dockerfile ENV variable. If you dont use docker or docker based deployments such as k8s, the default embedding model will be used (sentence-transformers/all-MiniLM-L6-v2)
 RAG_TOP_K = PersistentConfig(

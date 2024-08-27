@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Type
 import chromadb
 from apps.rag.vector_store.vector_store_extension import VectorStoreExtension
 from chromadb import Settings
-from config import (
+from env import (
     CHROMA_DATA_PATH,
     CHROMA_DATABASE,
     CHROMA_HTTP_HEADERS,

@@ -7,7 +7,7 @@ from apps.rag.vector_store.implementations import (
     PGVector,
 )
 from apps.rag.vector_store.vector_store_extension import VectorStoreExtension
-from config import VECTOR_STORE_TYPE
+from env import VECTOR_STORE_TYPE
 from langchain_core.embeddings import Embeddings
 
 

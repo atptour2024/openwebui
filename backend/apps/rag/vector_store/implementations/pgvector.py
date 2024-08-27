@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Optional, Type
 
 from apps.rag.vector_store.vector_store_extension import VectorStoreExtension
-from config import PGVECTOR_CONNECTION_STR
+from env import PGVECTOR_CONNECTION_STR
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_postgres import PGVector as LangChainPGVector
