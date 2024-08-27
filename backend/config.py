@@ -1,58 +1,28 @@
-from sqlalchemy import create_engine, Column, Integer, DateTime, JSON, func
-from contextlib import contextmanager
-
-
-import os
-import sys
-import logging
-import importlib.metadata
-import pkgutil
-from urllib.parse import urlparse
-from datetime import datetime
-
-import chromadb
-from chromadb import Settings
-from typing import TypeVar, Generic
-from pydantic import BaseModel
-from typing import Optional
-
-from pathlib import Path
 import json
-import yaml
+import logging
+import os
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Generic, Optional, TypeVar
+from urllib.parse import urlparse
 
 import requests
-import shutil
-
-
+import yaml
 from apps.webui.internal.db import Base, get_db
-
-from constants import ERROR_MESSAGES
-
 from env import (
-    ENV,
-    VERSION,
-    SAFE_MODE,
-    GLOBAL_LOG_LEVEL,
-    SRC_LOG_LEVELS,
-    BASE_DIR,
-    DATA_DIR,
     BACKEND_DIR,
-    FRONTEND_BUILD_DIR,
-    WEBUI_NAME,
-    WEBUI_URL,
-    WEBUI_FAVICON_URL,
-    WEBUI_BUILD_HASH,
     CONFIG_DATA,
-    DATABASE_URL,
-    CHANGELOG,
+    DATA_DIR,
+    ENV,
+    FRONTEND_BUILD_DIR,
     WEBUI_AUTH,
-    WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
-    WEBUI_AUTH_TRUSTED_NAME_HEADER,
-    WEBUI_SECRET_KEY,
-    WEBUI_SESSION_COOKIE_SAME_SITE,
-    WEBUI_SESSION_COOKIE_SECURE,
+    WEBUI_FAVICON_URL,
+    WEBUI_NAME,
     log,
 )
+from pydantic import BaseModel
+from sqlalchemy import JSON, Column, DateTime, Integer, func
 
 
 class EndpointFilter(logging.Filter):
@@ -72,8 +42,8 @@ logging.getLogger("uvicorn.access").addFilter(EndpointFilter())
 def run_migrations():
     print("Running migrations")
     try:
-        from alembic.config import Config
         from alembic import command
+        from alembic.config import Config
 
         alembic_cfg = Config("alembic.ini")
         command.upgrade(alembic_cfg, "head")
@@ -974,22 +944,7 @@ TIKA_SERVER_URL = PersistentConfig(
 # RAG
 ####################################
 
-CHROMA_DATA_PATH = f"{DATA_DIR}/vector_db"
-CHROMA_TENANT = os.environ.get("CHROMA_TENANT", chromadb.DEFAULT_TENANT)
-CHROMA_DATABASE = os.environ.get("CHROMA_DATABASE", chromadb.DEFAULT_DATABASE)
-CHROMA_HTTP_HOST = os.environ.get("CHROMA_HTTP_HOST", "")
-CHROMA_HTTP_PORT = int(os.environ.get("CHROMA_HTTP_PORT", "8000"))
-# Comma-separated list of header=value pairs
-CHROMA_HTTP_HEADERS = os.environ.get("CHROMA_HTTP_HEADERS", "")
-if CHROMA_HTTP_HEADERS:
-    CHROMA_HTTP_HEADERS = dict(
-        [pair.split("=") for pair in CHROMA_HTTP_HEADERS.split(",")]
-    )
-else:
-    CHROMA_HTTP_HEADERS = None
-CHROMA_HTTP_SSL = os.environ.get("CHROMA_HTTP_SSL", "false").lower() == "true"
 # this uses the model defined in the Dockerfile ENV variable. If you dont use docker or docker based deployments such as k8s, the default embedding model will be used (sentence-transformers/all-MiniLM-L6-v2)
-
 RAG_TOP_K = PersistentConfig(
     "RAG_TOP_K", "rag.top_k", int(os.environ.get("RAG_TOP_K", "5"))
 )
@@ -1079,25 +1034,6 @@ RAG_RERANKING_MODEL_AUTO_UPDATE = (
 RAG_RERANKING_MODEL_TRUST_REMOTE_CODE = (
     os.environ.get("RAG_RERANKING_MODEL_TRUST_REMOTE_CODE", "").lower() == "true"
 )
-
-
-if CHROMA_HTTP_HOST != "":
-    CHROMA_CLIENT = chromadb.HttpClient(
-        host=CHROMA_HTTP_HOST,
-        port=CHROMA_HTTP_PORT,
-        headers=CHROMA_HTTP_HEADERS,
-        ssl=CHROMA_HTTP_SSL,
-        tenant=CHROMA_TENANT,
-        database=CHROMA_DATABASE,
-        settings=Settings(allow_reset=True, anonymized_telemetry=False),
-    )
-else:
-    CHROMA_CLIENT = chromadb.PersistentClient(
-        path=CHROMA_DATA_PATH,
-        settings=Settings(allow_reset=True, anonymized_telemetry=False),
-        tenant=CHROMA_TENANT,
-        database=CHROMA_DATABASE,
-    )
 
 
 # device type embedding models - "cpu" (default), "cuda" (nvidia gpu required) or "mps" (apple silicon) - choosing this right can lead to better performance
