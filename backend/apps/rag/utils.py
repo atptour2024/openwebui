@@ -32,10 +32,18 @@ def query_doc(
     query: str,
     embedding_function,
     k: int,
+    embeddings: dict = {},
 ):
     try:
         collection = CHROMA_CLIENT.get_collection(name=collection_name)
-        query_embeddings = embedding_function(query)
+
+        query_embeddings = embeddings.get(query)
+
+        if not query_embeddings:
+            query_embeddings = embedding_function(query)
+            embeddings[query] = query_embeddings
+        else:
+            log.debug(f"Using cached embeddings for query {query}")
 
         result = collection.query(
             query_embeddings=[query_embeddings],
@@ -148,6 +156,7 @@ def query_collection(
     k: int,
 ):
     results = []
+    embeddings = {}
     for collection_name in collection_names:
         if collection_name:
             try:
@@ -156,6 +165,7 @@ def query_collection(
                     query=query,
                     k=k,
                     embedding_function=embedding_function,
+                    embeddings=embeddings,
                 )
                 results.append(result)
             except Exception:
@@ -203,7 +213,7 @@ def get_embedding_function(
     embedding_function,
     openai_key,
     openai_url,
-    batch_size,
+    embedding_batch_size,
 ):
     if embedding_engine == "":
         return lambda query: embedding_function.encode(query).tolist()
@@ -227,13 +237,10 @@ def get_embedding_function(
 
         def generate_multiple(query, f):
             if isinstance(query, list):
-                if embedding_engine == "openai":
-                    embeddings = []
-                    for i in range(0, len(query), batch_size):
-                        embeddings.extend(f(query[i : i + batch_size]))
-                    return embeddings
-                else:
-                    return [f(q) for q in query]
+                embeddings = []
+                for i in range(0, len(query), embedding_batch_size):
+                    embeddings.extend(f(query[i : i + embedding_batch_size]))
+                return embeddings
             else:
                 return f(query)
 
