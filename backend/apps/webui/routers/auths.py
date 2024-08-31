@@ -11,6 +11,7 @@ import uuid
 import csv
 
 from apps.webui.models.auths import (
+    LdapForm,
     SigninForm,
     SignupForm,
     AddUserForm,
@@ -37,7 +38,17 @@ from config import (
     WEBUI_AUTH,
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
     WEBUI_AUTH_TRUSTED_NAME_HEADER,
+    LDAP_SERVER,
+    LDAP_USERS_DN,
+    LDAP_APP_DN,
+    LDAP_APP_PASSWORD,
+    CA_CERT_FILE,
+    USE_SSL
+
 )
+
+from ldap3 import Server, Connection, ALL, Tls
+from ssl import CERT_REQUIRED, PROTOCOL_TLS
 
 router = APIRouter()
 
@@ -114,7 +125,78 @@ async def update_password(
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_PASSWORD)
     else:
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
+    
+############################
+# LDAP Authentication
+############################
+@router.post("/ldap", response_model=SigninResponse)
+async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
+    try:
+        tls = Tls(validate=CERT_REQUIRED, version=PROTOCOL_TLS, ca_certs_file=CA_CERT_FILE, ciphers='ALL')
+    except Exception as e:
+        logging.error(f"An error occurred on TSL: {str(e)}")
+        raise HTTPException(400, detail=str(e))
+    
+    LDAP_USER_DN = f'uid={form_data.user},{LDAP_USERS_DN}' 
 
+    try:
+        server = Server(host=LDAP_SERVER, get_info=ALL, use_ssl=USE_SSL, tls=tls)
+        connection_app = Connection(server, LDAP_APP_DN, LDAP_APP_PASSWORD, auto_bind=True, authentication='SIMPLE')
+        if not connection_app.bind():
+            raise HTTPException(400, detail="Application account bind failed")
+        
+        search_success = connection_app.search(search_base=LDAP_USERS_DN, search_filter=f'(uid={form_data.user})', attributes=['uid', 'mail', 'cn'])
+        if not search_success:
+            raise HTTPException(400, detail="User not found in the LDAP server")
+
+        entry = connection_app.entries[0]
+        uid = str(entry['uid'])
+        mail = str(entry['mail'])
+        cn = str(entry['cn']) # The common name component usually holds the full name of the user
+        if uid == form_data.user:
+            connection_user = Connection(server, LDAP_USER_DN, form_data.password, auto_bind=True, authentication='SIMPLE')
+            if not connection_user.bind():
+                raise HTTPException(400, f"Authentication failed for {form_data.user}")
+            
+            user = Users.get_user_by_email(mail.lower())
+            if not user:
+                await signup(
+                    request,
+                    response,
+                    SignupForm(email=mail, password=str(form_data.password), name=cn)
+                )
+                user = Auths.authenticate_user(mail, password=str(form_data.password))
+
+            if user:
+                token = create_token(
+                    data={"id": user.id},
+                    expires_delta=parse_duration(request.app.state.config.JWT_EXPIRES_IN),
+                )
+
+                # Set the cookie token
+                response.set_cookie(
+                    key="token",
+                    value=token,
+                    httponly=True,  # Ensures the cookie is not accessible via JavaScript
+                )
+
+                return {
+                    "token": token,
+                    "token_type": "Bearer",
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "role": user.role,
+                    "profile_image_url": user.profile_image_url,
+                }
+            else:
+                raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
+        else:
+            raise HTTPException(400, f"User {form_data.user} does not match the record. Search result: {entry['uid']}")
+    except Exception as e:
+        raise HTTPException(400, detail=str(e))
+
+# TODO: Handle server-side disconnection?
 
 ############################
 # SignIn

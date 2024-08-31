@@ -1,6 +1,6 @@
 <script>
 	import { goto } from '$app/navigation';
-	import { getSessionUser, userSignIn, userSignUp } from '$lib/apis/auths';
+	import { ldapUserSignIn, getSessionUser, userSignIn, userSignUp } from '$lib/apis/auths';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
@@ -34,6 +34,15 @@
 		}
 	};
 
+	const ldapSignInHandler = async () => {
+		const sessionUser = await ldapUserSignIn(email, password).catch((error) => {
+			toast.error(error);
+			return null;
+		});
+
+		await setSessionUser(sessionUser);
+	};
+
 	const signInHandler = async () => {
 		const sessionUser = await userSignIn(email, password).catch((error) => {
 			toast.error(error);
@@ -55,7 +64,10 @@
 	};
 
 	const submitHandler = async () => {
-		if (mode === 'signin') {
+		if (mode === 'ldap'){
+			await ldapSignInHandler();
+		}
+		else if (mode === 'signin') {
 			await signInHandler();
 		} else {
 			await signUpHandler();
@@ -194,15 +206,28 @@
 								{/if}
 
 								<div class="mb-2">
-									<div class=" text-sm font-medium text-left mb-1">{$i18n.t('Email')}</div>
-									<input
-										bind:value={email}
-										type="email"
-										class=" px-5 py-3 rounded-2xl w-full text-sm outline-none border dark:border-none dark:bg-gray-900"
-										autocomplete="email"
-										placeholder={$i18n.t('Enter Your Email')}
-										required
-									/>
+									<div class=" text-sm font-medium text-left mb-1">
+										{mode === 'ldap' ? $i18n.t('Username') : $i18n.t('Email')}
+									</div>
+									{#if mode === 'ldap'}
+										<input
+											bind:value={email}
+											type="text"
+											class=" px-5 py-3 rounded-2xl w-full text-sm outline-none border dark:border-none dark:bg-gray-900"
+											autocomplete="username"
+											placeholder={$i18n.t('Enter Your Username')}
+											required
+										/>
+									{:else}
+										<input
+											bind:value={email}
+											type="email"
+											class=" px-5 py-3 rounded-2xl w-full text-sm outline-none border dark:border-none dark:bg-gray-900"
+											autocomplete="email"
+											placeholder={$i18n.t('Enter Your Email')}
+											required
+										/>
+									{/if}
 								</div>
 
 								<div>
@@ -226,30 +251,48 @@
 									class=" bg-gray-900 hover:bg-gray-800 w-full rounded-2xl text-white font-medium text-sm py-3 transition"
 									type="submit"
 								>
-									{mode === 'signin' ? $i18n.t('Sign in') : $i18n.t('Create Account')}
+									{mode === 'ldap' ? $i18n.t('Authenticate') : mode === 'signin' ? $i18n.t('Sign in') : $i18n.t('Create Account')}
 								</button>
 
 								{#if $config?.features.enable_signup}
-									<div class=" mt-4 text-sm text-center">
-										{mode === 'signin'
-											? $i18n.t("Don't have an account?")
-											: $i18n.t('Already have an account?')}
+									{#if mode !== 'ldap'}
+										<div class=" mt-4 text-sm text-center">
+											{mode === 'signin'
+												? $i18n.t("Don't have an account?")
+												: $i18n.t('Already have an account?')}
 
-										<button
-											class=" font-medium underline"
-											type="button"
-											on:click={() => {
-												if (mode === 'signin') {
-													mode = 'signup';
-												} else {
-													mode = 'signin';
-												}
-											}}
-										>
-											{mode === 'signin' ? $i18n.t('Sign up') : $i18n.t('Sign in')}
-										</button>
-									</div>
+											<button
+												class=" font-medium underline"
+												type="button"
+												on:click={() => {
+													if (mode === 'signin') {
+														mode = 'signup';
+													} else {
+														mode = 'signin';
+													}
+												}}
+											>
+												{mode === 'signin' ? $i18n.t('Sign up') : $i18n.t('Sign in')}
+											</button>
+										</div>
+									{/if}
 								{/if}
+								<div class="mt-4 text-sm text-center">
+									{mode === 'ldap' ? $i18n.t("Using email and password?") : $i18n.t('Using LDAP?')}
+									<button 
+										class=" font-medium underline" 
+										type="button"
+										on:click={() => {
+											if(mode === 'ldap') {
+												mode = 'signin';
+											} else {
+												mode = 'ldap';
+											}
+										}}
+									>
+										{mode === 'ldap' ? $i18n.t('Email and Password') : $i18n.t('LDAP') }
+									</button>
+								</div>
 							</div>
 						{/if}
 					</form>
