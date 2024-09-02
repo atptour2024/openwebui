@@ -43,7 +43,7 @@ chromadb==0.5.5
 sentence-transformers==3.0.1
 pypdf==4.3.1
 docx2txt==0.8
-python-pptx==1.0.0
+python-pptx==1.0.2
 unstructured==0.15.7
 nltk==3.9.1
 Markdown==3.7
